@@ -1,6 +1,7 @@
-print("!!! ALIVE AND RUNNING FROM THE CORRECT FILE !!!")
+print("!!!PRINT ALIVE AND RUNNING FROM CORRECT FILE!!!")
 from dotenv import load_dotenv
 import os
+from flask_cors import CORS
 
 # FORCE python to read the .env file BEFORE doing anything else
 load_dotenv()

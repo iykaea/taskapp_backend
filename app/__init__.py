@@ -1,79 +1,34 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
 import os
+from flask import Flask
+from flask_cors import CORS
+from app.extensions import db
 from dotenv import load_dotenv
-from urllib.parse import quote_plus # Used to safely encode password
 
+# Load local .env file if it exists
 load_dotenv()
-
-db = SQLAlchemy()
 
 def create_app():
     app = Flask(__name__)
+    CORS(app)
 
-    # Get database connection details from environment variables (set by Ansible)
-    db_host = os.getenv('DATABASE_HOST')
-    db_port = os.getenv('DATABASE_PORT', '5432')
-    db_name = os.getenv('DATABASE_NAME')
-    db_user = os.getenv('DATABASE_USER')
-    db_password = os.getenv('DATABASE_PASSWORD')
+    # Load configuration from environment variables (Supabase URL & Secret Key)
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise ValueError("No DATABASE_URL set for the application. Check your environment variables!")
+        
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
 
-    if db_host and db_user and db_name and db_password:
-        # Build secure PostgreSQL URI using the real RDS values
-        # quote_plus ensures special characters in password are handled correctly
-        encoded_password = quote_plus(db_password)
-        database_uri = (
-            f"postgresql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
-        )
-    else:
-        # Fallback for local development when env vars are not set
-        database_uri = 'postgresql://taskapp_user:taskapp_password@localhost:5432/taskapp'
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "fallback-secret-key")
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_uri
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-    # Secret key for sessions / JWT (use a strong random value in production)
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-
+    # Initialize extensions
     db.init_app(app)
 
-    # Enable explicit CORS allowing cross-origin requests, custom headers, and methods
-    CORS(
-        app,
-        resources={r"/api/*": {"origins": "*"}},
-        allow_headers=["Content-Type", "Authorization"],
-        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    )
-
+    # Register blueprints
     from app.routes import api_bp
     app.register_blueprint(api_bp, url_prefix='/api')
-
-    with app.app_context():
-        from sqlalchemy import inspect
-        from app.models import User
-        from werkzeug.security import generate_password_hash
-       
-        # Check if tables exist before creating (idempotent)
-        inspector = inspect(db.engine)
-        existing_tables = inspector.get_table_names()
-       
-        if not existing_tables:
-            # First deployment - create all tables
-            db.create_all()
-            print("Database tables created")
-           
-            # Seed default users in production too (but only on first run)
-            users = [
-                User(username='admin', password_hash=generate_password_hash('admin123')),
-                User(username='student1', password_hash=generate_password_hash('Password123')),
-            ]
-            for user in users:
-                db.session.add(user)
-            db.session.commit()
-            print("Seeded default users")
-        else:
-            print(f"Tables already exist: {existing_tables}")
 
     return app
 

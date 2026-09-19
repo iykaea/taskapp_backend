@@ -1,0 +1,8 @@
+env/
+venv/
+pycache/
+*.zip
+*.tar.gz
+*.log
+.git/
+aws/
